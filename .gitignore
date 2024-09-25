@@ -1,0 +1,10 @@
+unsigned_binaries
+keys
+dtb_files
+temp_keys
+temp_dtb_files
+temp_combined_dtb_bin
+efimountedbin
+signed_binaries
+unsigned_combined_dtb_bin
+
