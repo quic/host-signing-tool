@@ -173,17 +173,22 @@ process.
     -   ***efi.bin*** contains ***Linux_Image.efi***(Linux Kernel image)
         & ***bootaa64.efi***(Bootloader image)
 
+    -   If OSTree support is present then ***efi.bin*** contains ***vmlinuz-x.y.z*** (Linux Kernel image e.g. vmlinuz-6.6.38) under ostree directory
+        & ***bootaa64.efi***(Bootloader image)
+
     -   ***dtb.bin*** contains ***combined-dtb.dtb***
 
 -   Host tool shall require the path
     of ***certificate*** and ***key***(absolute path or network path) -
     which would be used to sign the images
 
+-   Host tool can sign ***efi.bin***  with/without OSTree support as mentioned below
+
 -   Host tool shall first mount the ***efi.bin/dtb.bin*** on FAT
     partition - which would provide below directory structure - and
     follow their separate signing process
 
-***efi.bin***
+***efi.bin*** without OSTree support
 > ├── EFI
 >
 > │   ├── BOOT
@@ -197,6 +202,25 @@ process.
 > ├── loader
 >
 > │   └── loader.conf
+
+***efi.bin*** with OSTree support
+> ├── EFI
+>
+> │   ├── BOOT
+>
+> │   │   └── bootaa64.efi
+>
+> ├── loader
+>
+> │   └── loader.conf
+>
+> ├── ostree
+>
+> │   ├── poky-e7a2237ecd4319dae26f498925c89d892b11e9fb0f526adce78775502550bbf8
+>
+> │   │   └── initramfs-6.6.38.img
+>
+> │   │   └── vmlinuz-6.6.38
 
 ***dtb.bin***
 > └── combined-dtb.dtb
@@ -231,7 +255,7 @@ process.
 -   Below is the directory structure for
     signed ***efi.bin*** & ***dtb.bin***
 
-***efi.bin***
+***efi.bin*** without OSTree support
 > ├── EFI
 >
 > │   ├── BOOT
@@ -256,6 +280,35 @@ process.
 >
 > │   └── loader.conf
 
+***efi.bin*** with OSTree support
+> ├── EFI
+>
+> │   ├── BOOT
+>
+> │   │   └── bootaa64.efi
+>
+> ├── loader
+>
+> │   ├── keys
+>
+> │   │   ├──  authkeys
+>
+> │   │    │    └──  db.auth
+>
+> │   │    │    └──  KEK.auth
+>
+> │   │    │    └──  PK.auth
+>
+> │   └── loader.conf
+>
+> ├── ostree
+>
+> │   ├── poky-e7a2237ecd4319dae26f498925c89d892b11e9fb0f526adce78775502550bbf8
+>
+> │   │   └── initramfs-6.6.38.img
+>
+> │   │   └── vmlinuz-6.6.38
+
 ***dtb.bin***
 > ├── combined-dtb.dtb
 >
@@ -276,7 +329,7 @@ process.
 ##### 3.4.1.2 Efi.bin signing process
 
 -   Host tool shall use ***sbsign*** utility to
-    sign ***Linux_Image.efi*** & ***bootaa64.efi*** images separately.
+    sign ***Linux_Image.efi*** , ***vmlinuz-x.y.z *** & ***bootaa64.efi*** images separately.
 
 -   ***sbsign*** requires ***certificate*** and ***key*** for the
     signing process. Check the following syntax where ***dsk1.key*** is
@@ -290,6 +343,8 @@ process.
     -   *sbsign \--key **dsk1.key** \--cert **dsk1.crt** bootaa64.efi bootaa64.efi*
 
     -   *sbsign \--key **dsk1.key** \--cert **dsk1.crt** Linux_Image.efi Linux_Image.efi*
+
+    -   *sbsign \--key **dsk1.key** \--cert **dsk1.crt** vmlinuz-x.y.z vmlinuz-x.y.z*
 
 ##### 3.4.1.3 dtb.bin signing process
 

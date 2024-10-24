@@ -75,6 +75,7 @@ local_kek_auth_path = keys_directory + 'KEK.auth'
 local_db_auth_path = keys_directory + 'db.auth'
 unsigned_boot_img_path = mount_directory + 'EFI/BOOT/bootaa64.efi'
 unsigned_linux_img_path = mount_directory + 'EFI/Linux/'
+unsigned_vmlinuz_img_path = mount_directory + 'ostree'
 unsigned_dtb_file_path_efi = mount_directory + 'dtb/'
 unsigned_dtb_file_path_dtb = mount_directory
 signed_boot_img_path = unsigned_bin_directory + 'bootaa64.efi'
@@ -121,7 +122,7 @@ def script_usage_msg():
     print("###################################################################")
     print("SCRIPT USAGE MESSAGE:")
     print("This script will help with TWO operations(Performs one operation at a time): 1. Sign EFI/DTB, 2. Combine DTB files")
-    print("Operation - 1. Sign EITHER bootaa64.efi, Linux EFI image from efi.bin OR dtb files from dtb.bin")
+    print("Operation - 1. Sign EITHER bootaa64.efi, Linux EFI image, vmlinuz image from efi.bin OR dtb files from dtb.bin")
     print("1.1. To sign above images - this script will require 'keys' as well")
     print("1.2. efi.bin/dtb.bin and 'keys' can be present at local machine or at some remote location")
     print("1.3. To use this script first choose where this files are present - i.e., Remote Path or Local path")
@@ -1082,32 +1083,90 @@ def sign_efi_image():
         print("Failed to copy bootaa64.efi - Exiting the tool!")
         sys.exit(status)
 
-    #Step-2: Sign Linux efi image
-    linux_img_path = next((os.path.join(unsigned_linux_img_path, f) for f in os.listdir(unsigned_linux_img_path) if f.endswith('.efi') and os.path.isfile(os.path.join(unsigned_linux_img_path, f))), None)
-    if linux_img_path:
-        linux_file_name = os.path.basename(linux_img_path) if linux_img_path else None
-        if linux_file_name is None:
-            print(f"Failed to find Linux EFI file name - Exiting the tool!")
-            sys.exit(1)
+    linux_image_found = False
+    #Step-2: Sign Linux efi image if exists
+    if os.path.exists(unsigned_linux_img_path):
+        linux_img_path = next((os.path.join(unsigned_linux_img_path, f) for f in os.listdir(unsigned_linux_img_path) if f.endswith('.efi') and os.path.isfile(os.path.join(unsigned_linux_img_path, f))), None)
+        if linux_img_path:
+            linux_file_name = os.path.basename(linux_img_path) if linux_img_path else None
+            if linux_file_name is None:
+                print(f"Failed to find Linux EFI file name - Continue to check ostree path")
+            else:
+                linux_image_found = True
 
-        signed_linux_img_path = unsigned_bin_directory + linux_file_name
+                signed_linux_img_path = unsigned_bin_directory + linux_file_name
 
-        print(f"Signing {linux_file_name}...")
-        sign_linux_img_cmd = f"sudo sbsign --key {local_key_path} --cert {local_cert_path} {linux_img_path} --output {signed_linux_img_path}"
-        status = execute_command(sign_linux_img_cmd)
-        if status != 0:
-            print("Failed to sign Linux EFI - Exiting the tool!")
-            sys.exit(status)
+                print(f"Signing {linux_file_name}...")
+                sign_linux_img_cmd = f"sudo sbsign --key {local_key_path} --cert {local_cert_path} {linux_img_path} --output {signed_linux_img_path}"
+                status = execute_command(sign_linux_img_cmd)
+                if status != 0:
+                    print("Failed to sign Linux EFI - Exiting the tool!")
+                    sys.exit(status)
 
-        #Step-2.1: copy signed Linux EFI to its original path in mount path
-        print("Copy Signed Linux EFI to mount path...")
-        copy_linux_img_cmd = f"sudo cp {signed_linux_img_path} {unsigned_linux_img_path}"
-        status = execute_command(copy_linux_img_cmd)
-        if status != 0:
-            print("Failed to copy Linx EFI - Exiting the tool!")
-            sys.exit(status)
+                #Step-2.1: copy signed Linux EFI to its original path in mount path
+                print("Copy Signed Linux EFI to mount path...")
+                copy_linux_img_cmd = f"sudo cp {signed_linux_img_path} {unsigned_linux_img_path}"
+                status = execute_command(copy_linux_img_cmd)
+                if status != 0:
+                    print("Failed to copy Linx EFI - Exiting the tool!")
+                    sys.exit(status)
+        else:
+            print(f"Failed to find Linux EFI file path - Continue to check ostree path!")
     else:
-        print(f"Failed to find Linux EFI file path - Exiting the tool!")
+        print(f"Linux directory does not exists - Continue to check ostree path!")
+
+    #Step-3: Sign vmlinuz image under ostree path
+    # Check if ostree directory exists or not
+    if os.path.exists(unsigned_vmlinuz_img_path):
+        files_found = False
+        poky_folders_found = False
+        for root, dirs, files in os.walk(unsigned_vmlinuz_img_path):
+            # Check if the current directory is a poky-xyz folder
+            if os.path.basename(root).startswith('poky-'):
+                poky_folders_found = True
+                poky_folder = root
+                poky_path_name = os.path.basename(root)
+                print(f"Processing folder: {poky_path_name}")
+                vmlinuz_files_found_in_poky = False
+                for file in files:
+                    if file.startswith('vmlinuz-'):
+                        vmlinuz_img_path = os.path.join(root, file)
+                        if not os.path.isfile(vmlinuz_img_path):
+                            print(f"File does not exist or is not a file: {vmlinuz_img_path}")
+                        else:
+                            vmlinuz_files_found_in_poky = True
+                            files_found = True
+                            vmlinuz_img_name = os.path.basename(vmlinuz_img_path) if vmlinuz_img_path else None
+                            if vmlinuz_img_name is None:
+                                print(f"Failed to find vmlinuz file name")
+                            else:
+                                linux_image_found = True
+                                signed_vmlinuz_img_path = unsigned_bin_directory + vmlinuz_img_name
+                                print(f"Signing {vmlinuz_img_name}...")
+                                sign_vmlinuz_img_cmd = f"sudo sbsign --key {local_key_path} --cert {local_cert_path} {vmlinuz_img_path} --output {signed_vmlinuz_img_path}"
+                                status = execute_command(sign_vmlinuz_img_cmd)
+                                if status != 0:
+                                    print("Failed to sign vmlinuz - Exiting the tool!")
+                                    sys.exit(status)
+
+                                #Step-3.1: copy signed vmlinuz to its original path in mount path under poky folder
+                                print("Copy Signed vmlinuz to mount path...")
+                                copy_vmlinuz_img_cmd = f"sudo cp {signed_vmlinuz_img_path} {poky_folder}"
+                                status = execute_command(copy_vmlinuz_img_cmd)
+                                if status != 0:
+                                    print("Failed to copy signed vmlinuz - Exiting the tool!")
+                                    sys.exit(status)
+                if not vmlinuz_files_found_in_poky:
+                    print(f"No vmlinuz files found in folder: {poky_path_name}")
+        if not poky_folders_found:
+            print("No poky folders found under the ostree directory.")
+        elif not files_found:
+            print("No vmlinuz files found in any poky folders under the ostree directory.")
+    else:
+        print(f"The directory {unsigned_vmlinuz_img_path} does not exist.")
+
+    if not linux_image_found:
+        print("No linux image found under LINUX or ostree path - Exiting the tool!")
         sys.exit(1)
 
     # IMPORTANT:
